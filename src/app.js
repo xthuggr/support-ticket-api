@@ -1,11 +1,13 @@
+require("dotenv").config();
 const express = require("express");
 const app = express();
 const healthRoutes = require("./routes/healthRoutes");
-require("dotenv").config();
+const dbRoutes = require("./routes/dbRoutes");
 
 app.use(express.json());
 
 app.use("/health", healthRoutes);
+app.use("/db-check", dbRoutes);
 
 const PORT = process.env.PORT || 3000;
 
