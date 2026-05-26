@@ -4,12 +4,16 @@ const app = express();
 const healthRoutes = require("./routes/healthRoutes");
 const dbRoutes = require("./routes/dbRoutes");
 const userRoutes = require("./routes/userRoutes");
+const authRoutes = require("./routes/authRoutes");
+const ticketRoutes = require("./routes/ticketRoutes");
 
 app.use(express.json());
 
 app.use("/health", healthRoutes);
 app.use("/db-check", dbRoutes);
 app.use("/users", userRoutes);
+app.use("/auth", authRoutes);
+app.use("/tickets", ticketRoutes);
 
 const PORT = process.env.PORT || 3000;
 
