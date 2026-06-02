@@ -46,22 +46,86 @@ exports.getTickets = async (req, res) => {
   try {
     const userId = req.user.id;
     const userRole = req.user.role;
+    const status = req.query.status;
+    const priority = req.query.priority;
 
-    if (userRole === "support" || userRole === "admin") {
-      const result = await pool.query(
-        "SELECT * FROM tickets ORDER BY created_at DESC",
-      );
+    const allowedStatus = [
+      "open",
+      "in_progress",
+      "waiting_customer",
+      "resolved",
+      "closed",
+    ];
+    const isStatusValid = allowedStatus.includes(status);
+    const allowedPriorities = ["low", "medium", "high"];
+    const isValidPriority = allowedPriorities.includes(priority);
+
+    const isStaff = userRole === "support" || userRole === "admin";
+    const isCustomer = userRole === "customer";
+
+    if (status && !isStatusValid) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid request",
+      });
+    }
+    if (priority && !isValidPriority) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid request",
+      });
+    }
+    if (isStaff) {
+      let result;
+      if (isStatusValid && isValidPriority) {
+        result = await pool.query(
+          "SELECT * FROM tickets WHERE status = $1 AND priority = $2 ORDER BY created_at DESC",
+          [status, priority],
+        );
+      } else if (isStatusValid) {
+        result = await pool.query(
+          "SELECT * FROM tickets WHERE status = $1 ORDER BY created_at DESC",
+          [status],
+        );
+      } else if (isValidPriority) {
+        result = await pool.query(
+          "SELECT * FROM tickets WHERE priority = $1 ORDER BY created_at DESC",
+          [priority],
+        );
+      } else {
+        result = await pool.query(
+          "SELECT * FROM tickets ORDER BY created_at DESC",
+        );
+      }
       return res.status(200).json({
         status: "success",
         count: result.rowCount,
         tickets: result.rows,
       });
     }
-    if (userRole === "customer") {
-      const result = await pool.query(
-        "SELECT * FROM tickets WHERE created_by = $1 ORDER BY created_at DESC",
-        [userId],
-      );
+    if (isCustomer) {
+      let result;
+      if (isStatusValid && isValidPriority) {
+        result = await pool.query(
+          "SELECT * FROM tickets WHERE created_by = $1 AND status = $2 AND priority = $3 ORDER BY created_at DESC",
+          [userId, status, priority],
+        );
+      } else if (isStatusValid) {
+        result = await pool.query(
+          "SELECT * FROM tickets WHERE created_by = $1 AND status = $2 ORDER BY created_at DESC",
+          [userId, status],
+        );
+      } else if (isValidPriority) {
+        result = await pool.query(
+          "SELECT * FROM tickets WHERE created_by = $1 AND priority = $2 ORDER BY created_at DESC",
+          [userId, priority],
+        );
+      } else {
+        result = await pool.query(
+          "SELECT * FROM tickets WHERE created_by = $1 ORDER BY created_at DESC",
+          [userId],
+        );
+      }
       return res.status(200).json({
         status: "success",
         tickets: result.rows,
@@ -138,8 +202,8 @@ exports.updateTicketStatus = async (req, res) => {
       message: "Forbidden",
     });
   }
-  const compareStatus = allowedStatus.includes(status);
-  if (!compareStatus) {
+  const isStatusValid = allowedStatus.includes(status);
+  if (!isStatusValid) {
     return res.status(400).json({
       status: "error",
       message: "Invalid status",
