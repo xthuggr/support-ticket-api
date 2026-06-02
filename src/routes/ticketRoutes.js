@@ -8,6 +8,7 @@ router.get("/", authMiddleware, ticketController.getTickets);
 router.patch("/:id/assign", authMiddleware, ticketController.assignTicket);
 router.post("/:id/comments", authMiddleware, ticketController.createComment);
 router.get("/:id/comments", authMiddleware, ticketController.getComments);
+router.get("/:id/activity", authMiddleware, ticketController.getTicketActivity);
 router.get("/:id", authMiddleware, ticketController.getTicketById);
 router.patch("/:id", authMiddleware, ticketController.updateTicketStatus);
 
