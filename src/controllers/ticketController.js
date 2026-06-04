@@ -1,4 +1,5 @@
 const pool = require("../db/pool");
+const ticketService = require("../services/ticketService");
 
 exports.createTicket = async (req, res) => {
   const { title, description, priority } = req.body;
@@ -44,98 +45,38 @@ exports.createTicket = async (req, res) => {
 
 exports.getTickets = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const userRole = req.user.role;
-    const status = req.query.status;
-    const priority = req.query.priority;
-
-    const allowedStatus = [
-      "open",
-      "in_progress",
-      "waiting_customer",
-      "resolved",
-      "closed",
-    ];
-    const isStatusValid = allowedStatus.includes(status);
-    const allowedPriorities = ["low", "medium", "high"];
-    const isValidPriority = allowedPriorities.includes(priority);
-
-    const isStaff = userRole === "support" || userRole === "admin";
-    const isCustomer = userRole === "customer";
-
-    if (status && !isStatusValid) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid request",
-      });
-    }
-    if (priority && !isValidPriority) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid request",
-      });
-    }
-    if (isStaff) {
-      let result;
-      if (isStatusValid && isValidPriority) {
-        result = await pool.query(
-          "SELECT * FROM tickets WHERE status = $1 AND priority = $2 ORDER BY created_at DESC",
-          [status, priority],
-        );
-      } else if (isStatusValid) {
-        result = await pool.query(
-          "SELECT * FROM tickets WHERE status = $1 ORDER BY created_at DESC",
-          [status],
-        );
-      } else if (isValidPriority) {
-        result = await pool.query(
-          "SELECT * FROM tickets WHERE priority = $1 ORDER BY created_at DESC",
-          [priority],
-        );
-      } else {
-        result = await pool.query(
-          "SELECT * FROM tickets ORDER BY created_at DESC",
-        );
-      }
-      return res.status(200).json({
-        status: "success",
-        count: result.rowCount,
-        tickets: result.rows,
-      });
-    }
-    if (isCustomer) {
-      let result;
-      if (isStatusValid && isValidPriority) {
-        result = await pool.query(
-          "SELECT * FROM tickets WHERE created_by = $1 AND status = $2 AND priority = $3 ORDER BY created_at DESC",
-          [userId, status, priority],
-        );
-      } else if (isStatusValid) {
-        result = await pool.query(
-          "SELECT * FROM tickets WHERE created_by = $1 AND status = $2 ORDER BY created_at DESC",
-          [userId, status],
-        );
-      } else if (isValidPriority) {
-        result = await pool.query(
-          "SELECT * FROM tickets WHERE created_by = $1 AND priority = $2 ORDER BY created_at DESC",
-          [userId, priority],
-        );
-      } else {
-        result = await pool.query(
-          "SELECT * FROM tickets WHERE created_by = $1 ORDER BY created_at DESC",
-          [userId],
-        );
-      }
-      return res.status(200).json({
-        status: "success",
-        tickets: result.rows,
-      });
-    }
-    return res.status(403).json({
-      status: "error",
-      message: "Forbidden",
+    const tickets = await ticketService.getTickets({
+      userId: req.user.id,
+      userRole: req.user.role,
+      status: req.query.status,
+      priority: req.query.priority,
+      page: req.query.page,
+      limit: req.query.limit,
+    });
+    return res.status(200).json({
+      status: "success",
+      count: tickets.length,
+      tickets,
     });
   } catch (err) {
+    if (err.message === "FORBIDDEN") {
+      return res.status(403).json({
+        status: "error",
+        message: "Forbidden",
+      });
+    }
+    if (err.message === "INVALID_FILTER") {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid filter",
+      });
+    }
+    if (err.message === "INVALID_NUMBER") {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid number",
+      });
+    }
     console.error("Error inside getTickets controller", err.message);
     res.status(500).json({
       status: "error",
@@ -146,36 +87,28 @@ exports.getTickets = async (req, res) => {
 
 exports.getTicketById = async (req, res) => {
   try {
-    const ticketId = req.params.id;
-    const userId = req.user.id;
-    const userRole = req.user.role;
-    const result = await pool.query("SELECT * FROM tickets WHERE id = $1", [
-      ticketId,
-    ]);
-    const ticket = result.rows[0];
-    if (result.rows.length === 0) {
+    const ticket = await ticketService.getTicketById({
+      ticketId: req.params.id,
+      userId: req.user.id,
+      userRole: req.user.role,
+    });
+    return res.status(200).json({
+      status: "success",
+      ticket,
+    });
+  } catch (err) {
+    if (err.message === "FORBIDDEN") {
+      return res.status(403).json({
+        status: "error",
+        message: "Forbidden",
+      });
+    }
+    if (err.message === "TICKET_NOT_FOUND") {
       return res.status(404).json({
         status: "error",
         message: "Ticket not found",
       });
     }
-    if (userRole === "support" || userRole === "admin") {
-      return res.status(200).json({
-        status: "success",
-        ticket: ticket,
-      });
-    }
-    if (userRole === "customer" && ticket.created_by === userId) {
-      return res.status(200).json({
-        status: "success",
-        ticket: ticket,
-      });
-    }
-    return res.status(403).json({
-      status: "error",
-      message: "Forbidden",
-    });
-  } catch (err) {
     console.error("Error inside getTicketById controller", err.message);
     res.status(500).json({
       status: "error",
