@@ -30,70 +30,77 @@ exports.getTickets = async ({
     throw new Error("INVALID_FILTER");
   }
 
-  const pageNumber = Number(page);
-  const limitNumber = Number(limit) || 10;
-
-  console.log(pageNumber);
-  console.log(pageNumber < 1);
-  if (pageNumber < 1) {
-    throw new Error("INVALID_NUMBER");
-    console.log("hit");
+  if (!page || page === "") {
+    page = 1;
   }
-  // if (!limitNumber >= 1 || !limitNumber <= 50) {
-  //   throw new Error("INVALID_NUMBER");
-  // }
+  const pageNumber = Number(page);
+  if (pageNumber < 1 || Number.isNaN(pageNumber)) {
+    throw new Error("INVALID_PAGINATION");
+  }
+
+  if (!limit || limit === "") {
+    limit = 10;
+  }
+  const limitNumber = Number(limit);
+  if (limitNumber < 1 || limitNumber > 50 || Number.isNaN(limitNumber)) {
+    throw new Error("INVALID_PAGINATION");
+  }
 
   const offset = (pageNumber - 1) * limitNumber;
 
+  let result;
   if (isStaff) {
-    let result;
     if (isStatusValid && isValidPriority) {
       result = await pool.query(
-        "SELECT * FROM tickets WHERE status = $1 AND priority = $2 ORDER BY created_at DESC",
-        [status, priority],
+        "SELECT * FROM tickets WHERE status = $1 AND priority = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
+        [status, priority, limitNumber, offset],
       );
     } else if (isStatusValid) {
       result = await pool.query(
-        "SELECT * FROM tickets WHERE status = $1 ORDER BY created_at DESC",
-        [status],
+        "SELECT * FROM tickets WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        [status, limitNumber, offset],
       );
     } else if (isValidPriority) {
       result = await pool.query(
-        "SELECT * FROM tickets WHERE priority = $1 ORDER BY created_at DESC",
-        [priority],
+        "SELECT * FROM tickets WHERE priority = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        [priority, limitNumber, offset],
       );
     } else {
       result = await pool.query(
-        "SELECT * FROM tickets ORDER BY created_at DESC",
+        "SELECT * FROM tickets ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+        [limitNumber, offset],
       );
     }
-    return result.rows;
   }
   if (isCustomer) {
-    let result;
     if (isStatusValid && isValidPriority) {
       result = await pool.query(
-        "SELECT * FROM tickets WHERE created_by = $1 AND status = $2 AND priority = $3 ORDER BY created_at DESC",
-        [userId, status, priority],
+        "SELECT * FROM tickets WHERE created_by = $1 AND status = $2 AND priority = $3 ORDER BY created_at DESC LIMIT $4 OFFSET $5",
+        [userId, status, priority, limitNumber, offset],
       );
     } else if (isStatusValid) {
       result = await pool.query(
-        "SELECT * FROM tickets WHERE created_by = $1 AND status = $2 ORDER BY created_at DESC",
-        [userId, status],
+        "SELECT * FROM tickets WHERE created_by = $1 AND status = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
+        [userId, status, limitNumber, offset],
       );
     } else if (isValidPriority) {
       result = await pool.query(
-        "SELECT * FROM tickets WHERE created_by = $1 AND priority = $2 ORDER BY created_at DESC",
-        [userId, priority],
+        "SELECT * FROM tickets WHERE created_by = $1 AND priority = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
+        [userId, priority, limitNumber, offset],
       );
     } else {
       result = await pool.query(
-        "SELECT * FROM tickets WHERE created_by = $1 ORDER BY created_at DESC",
-        [userId],
+        "SELECT * FROM tickets WHERE created_by = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        [userId, limitNumber, offset],
       );
     }
-    return result.rows;
   }
+  return {
+    tickets: result.rows,
+    page: pageNumber,
+    limit: limitNumber,
+    count: result.rowCount,
+  };
 };
 
 exports.getTicketById = async ({ ticketId, userId, userRole }) => {

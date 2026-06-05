@@ -45,7 +45,7 @@ exports.createTicket = async (req, res) => {
 
 exports.getTickets = async (req, res) => {
   try {
-    const tickets = await ticketService.getTickets({
+    const ticketsData = await ticketService.getTickets({
       userId: req.user.id,
       userRole: req.user.role,
       status: req.query.status,
@@ -55,8 +55,10 @@ exports.getTickets = async (req, res) => {
     });
     return res.status(200).json({
       status: "success",
-      count: tickets.length,
-      tickets,
+      page: ticketsData.page,
+      limit: ticketsData.limit,
+      count: ticketsData.count,
+      tickets: ticketsData.tickets,
     });
   } catch (err) {
     if (err.message === "FORBIDDEN") {
@@ -71,10 +73,10 @@ exports.getTickets = async (req, res) => {
         message: "Invalid filter",
       });
     }
-    if (err.message === "INVALID_NUMBER") {
+    if (err.message === "INVALID_PAGINATION") {
       return res.status(400).json({
         status: "error",
-        message: "Invalid number",
+        message: "Invalid pagination",
       });
     }
     console.error("Error inside getTickets controller", err.message);
