@@ -5,6 +5,7 @@ exports.getTickets = async ({
   userRole,
   status,
   priority,
+  search,
   page,
   limit,
 }) => {
@@ -29,7 +30,6 @@ exports.getTickets = async ({
   if (priority && !isValidPriority) {
     throw new Error("INVALID_FILTER");
   }
-
   if (!page || page === "") {
     page = 1;
   }
@@ -37,7 +37,6 @@ exports.getTickets = async ({
   if (pageNumber < 1 || Number.isNaN(pageNumber)) {
     throw new Error("INVALID_PAGINATION");
   }
-
   if (!limit || limit === "") {
     limit = 10;
   }
@@ -45,61 +44,66 @@ exports.getTickets = async ({
   if (limitNumber < 1 || limitNumber > 50 || Number.isNaN(limitNumber)) {
     throw new Error("INVALID_PAGINATION");
   }
-
   const offset = (pageNumber - 1) * limitNumber;
 
-  let result;
-  if (isStaff) {
-    if (isStatusValid && isValidPriority) {
-      result = await pool.query(
-        "SELECT * FROM tickets WHERE status = $1 AND priority = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
-        [status, priority, limitNumber, offset],
-      );
-    } else if (isStatusValid) {
-      result = await pool.query(
-        "SELECT * FROM tickets WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-        [status, limitNumber, offset],
-      );
-    } else if (isValidPriority) {
-      result = await pool.query(
-        "SELECT * FROM tickets WHERE priority = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-        [priority, limitNumber, offset],
-      );
-    } else {
-      result = await pool.query(
-        "SELECT * FROM tickets ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-        [limitNumber, offset],
-      );
-    }
-  }
+  const searchTerm = search?.trim();
+
+  let query = "SELECT * FROM tickets";
+  let countQuery = "SELECT COUNT(*) FROM tickets";
+  const conditions = [];
+  const values = [];
+
   if (isCustomer) {
-    if (isStatusValid && isValidPriority) {
-      result = await pool.query(
-        "SELECT * FROM tickets WHERE created_by = $1 AND status = $2 AND priority = $3 ORDER BY created_at DESC LIMIT $4 OFFSET $5",
-        [userId, status, priority, limitNumber, offset],
-      );
-    } else if (isStatusValid) {
-      result = await pool.query(
-        "SELECT * FROM tickets WHERE created_by = $1 AND status = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
-        [userId, status, limitNumber, offset],
-      );
-    } else if (isValidPriority) {
-      result = await pool.query(
-        "SELECT * FROM tickets WHERE created_by = $1 AND priority = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
-        [userId, priority, limitNumber, offset],
-      );
-    } else {
-      result = await pool.query(
-        "SELECT * FROM tickets WHERE created_by = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-        [userId, limitNumber, offset],
-      );
-    }
+    values.push(userId);
+    conditions.push(`created_by = $${values.length}`);
   }
+
+  if (status) {
+    values.push(status);
+    conditions.push(` status = $${values.length}`);
+  }
+
+  if (priority) {
+    values.push(priority);
+    conditions.push(` priority = $${values.length}`);
+  }
+
+  if (searchTerm) {
+    values.push(`%${searchTerm}%`);
+    conditions.push(
+      `(title ILIKE $${values.length} OR description ILIKE $${values.length})`,
+    );
+  }
+
+  if (conditions.length > 0) {
+    const whereClause = " WHERE " + conditions.join(" AND ");
+    query += whereClause;
+    countQuery += whereClause;
+  }
+
+  const countResult = await pool.query(countQuery, values);
+
+  const [{ count }] = countResult.rows;
+  const totalTickets = Number(count);
+  const totalPages = Math.ceil(totalTickets / limitNumber);
+
+  query += ` ORDER BY created_at DESC`;
+
+  values.push(limitNumber);
+  query += ` LIMIT $${values.length}`;
+
+  values.push(offset);
+  query += ` OFFSET $${values.length}`;
+
+  const result = await pool.query(query, values);
+
   return {
     tickets: result.rows,
     page: pageNumber,
     limit: limitNumber,
     count: result.rowCount,
+    total: totalTickets,
+    totalPages: totalPages,
   };
 };
 

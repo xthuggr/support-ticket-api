@@ -50,6 +50,7 @@ exports.getTickets = async (req, res) => {
       userRole: req.user.role,
       status: req.query.status,
       priority: req.query.priority,
+      search: req.query.search,
       page: req.query.page,
       limit: req.query.limit,
     });
@@ -58,6 +59,8 @@ exports.getTickets = async (req, res) => {
       page: ticketsData.page,
       limit: ticketsData.limit,
       count: ticketsData.count,
+      total: ticketsData.total,
+      totalPages: ticketsData.totalPages,
       tickets: ticketsData.tickets,
     });
   } catch (err) {
