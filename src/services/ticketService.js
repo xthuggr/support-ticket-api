@@ -1,4 +1,10 @@
 const pool = require("../db/pool");
+const {
+  ALLOWED_STATUSES,
+  ALLOWED_PRIORITIES,
+} = require("../utils/ticketConstants");
+
+const AppError = require("../utils/AppError");
 
 exports.getTickets = async ({
   userId,
@@ -12,37 +18,31 @@ exports.getTickets = async ({
   const isStaff = userRole === "support" || userRole === "admin";
   const isCustomer = userRole === "customer";
   if (!isStaff && !isCustomer) {
-    throw new Error("FORBIDDEN");
+    throw new AppError("Forbidden", 403);
   }
-  const allowedStatus = [
-    "open",
-    "in_progress",
-    "waiting_customer",
-    "resolved",
-    "closed",
-  ];
-  const isStatusValid = allowedStatus.includes(status);
-  const allowedPriorities = ["low", "medium", "high"];
-  const isValidPriority = allowedPriorities.includes(priority);
+
+  const isStatusValid = ALLOWED_STATUSES.includes(status);
+  const isValidPriority = ALLOWED_PRIORITIES.includes(priority);
+
   if (status && !isStatusValid) {
-    throw new Error("INVALID_FILTER");
+    throw new AppError("Invalid filter", 400);
   }
   if (priority && !isValidPriority) {
-    throw new Error("INVALID_FILTER");
+    throw new AppError("Invalid filter", 400);
   }
   if (!page || page === "") {
     page = 1;
   }
   const pageNumber = Number(page);
   if (pageNumber < 1 || Number.isNaN(pageNumber)) {
-    throw new Error("INVALID_PAGINATION");
+    throw new AppError("Invalid pagination", 400);
   }
   if (!limit || limit === "") {
     limit = 10;
   }
   const limitNumber = Number(limit);
   if (limitNumber < 1 || limitNumber > 50 || Number.isNaN(limitNumber)) {
-    throw new Error("INVALID_PAGINATION");
+    throw new AppError("Invalid pagination", 400);
   }
   const offset = (pageNumber - 1) * limitNumber;
 
@@ -60,12 +60,12 @@ exports.getTickets = async ({
 
   if (status) {
     values.push(status);
-    conditions.push(` status = $${values.length}`);
+    conditions.push(`status = $${values.length}`);
   }
 
   if (priority) {
     values.push(priority);
-    conditions.push(` priority = $${values.length}`);
+    conditions.push(`priority = $${values.length}`);
   }
 
   if (searchTerm) {
@@ -113,7 +113,7 @@ exports.getTicketById = async ({ ticketId, userId, userRole }) => {
   ]);
 
   if (result.rows.length === 0) {
-    throw new Error("TICKET_NOT_FOUND");
+    throw new AppError("Ticket not found", 404);
   }
 
   const ticket = result.rows[0];
@@ -122,7 +122,7 @@ exports.getTicketById = async ({ ticketId, userId, userRole }) => {
   const isTicketOwner = userRole === "customer" && userId === ticket.created_by;
 
   if (!isStaff && !isTicketOwner) {
-    throw new Error("FORBIDDEN");
+    throw new AppError("Forbidden", 403);
   }
 
   return ticket;

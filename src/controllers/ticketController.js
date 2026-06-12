@@ -1,5 +1,9 @@
 const pool = require("../db/pool");
 const ticketService = require("../services/ticketService");
+const {
+  ALLOWED_STATUSES,
+  ALLOWED_PRIORITIES,
+} = require("../utils/ticketConstants");
 
 exports.createTicket = async (req, res) => {
   const { title, description, priority } = req.body;
@@ -43,7 +47,7 @@ exports.createTicket = async (req, res) => {
   }
 };
 
-exports.getTickets = async (req, res) => {
+exports.getTickets = async (req, res, next) => {
   try {
     const ticketsData = await ticketService.getTickets({
       userId: req.user.id,
@@ -64,33 +68,11 @@ exports.getTickets = async (req, res) => {
       tickets: ticketsData.tickets,
     });
   } catch (err) {
-    if (err.message === "FORBIDDEN") {
-      return res.status(403).json({
-        status: "error",
-        message: "Forbidden",
-      });
-    }
-    if (err.message === "INVALID_FILTER") {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid filter",
-      });
-    }
-    if (err.message === "INVALID_PAGINATION") {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid pagination",
-      });
-    }
-    console.error("Error inside getTickets controller", err.message);
-    res.status(500).json({
-      status: "error",
-      message: "An unexpected server error occurred",
-    });
+    next(err);
   }
 };
 
-exports.getTicketById = async (req, res) => {
+exports.getTicketById = async (req, res, next) => {
   try {
     const ticket = await ticketService.getTicketById({
       ticketId: req.params.id,
@@ -102,23 +84,7 @@ exports.getTicketById = async (req, res) => {
       ticket,
     });
   } catch (err) {
-    if (err.message === "FORBIDDEN") {
-      return res.status(403).json({
-        status: "error",
-        message: "Forbidden",
-      });
-    }
-    if (err.message === "TICKET_NOT_FOUND") {
-      return res.status(404).json({
-        status: "error",
-        message: "Ticket not found",
-      });
-    }
-    console.error("Error inside getTicketById controller", err.message);
-    res.status(500).json({
-      status: "error",
-      message: "An unexpected server error occurred",
-    });
+    next(err);
   }
 };
 
@@ -127,20 +93,13 @@ exports.updateTicketStatus = async (req, res) => {
   const { status } = req.body;
   const userRole = req.user.role;
   const userId = req.user.id;
-  const allowedStatus = [
-    "open",
-    "in_progress",
-    "waiting_customer",
-    "resolved",
-    "closed",
-  ];
   if (userRole !== "support" && userRole !== "admin") {
     return res.status(403).json({
       status: "error",
       message: "Forbidden",
     });
   }
-  const isStatusValid = allowedStatus.includes(status);
+  const isStatusValid = ALLOWED_STATUSES.includes(status);
   if (!isStatusValid) {
     return res.status(400).json({
       status: "error",
