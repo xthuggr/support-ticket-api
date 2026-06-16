@@ -3,8 +3,44 @@ const {
   ALLOWED_STATUSES,
   ALLOWED_PRIORITIES,
 } = require("../utils/ticketConstants");
-
 const AppError = require("../utils/AppError");
+
+exports.createTicket = async ({ title, description, priority, userId }) => {
+  const ticketPriority = priority || "medium";
+  if (!title || !description) {
+    throw new AppError("All fields are required", 400);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ticketResult = await client.query(
+      "INSERT INTO tickets (title, description, priority, created_by) VALUES ($1, $2, $3, $4) RETURNING id, title, description, status, priority, created_by, assigned_to, created_at",
+      [title, description, ticketPriority, userId],
+    );
+    const ticket = ticketResult.rows[0];
+    const ticketId = ticket.id;
+    const action = "ticket_created";
+    const details = "Ticket was created";
+    await client.query(
+      "INSERT INTO ticket_activity (ticket_id, actor_id, action, details) VALUES ($1, $2, $3, $4)",
+      [ticketId, userId, action, details],
+    );
+    await client.query("COMMIT");
+    return ticket;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.statusCode) {
+      throw err;
+    }
+    console.error(
+      "An unexpected error occurred in createTicket Service",
+      err.message,
+    );
+    throw new AppError("An unexpected server error occurred", 500);
+  } finally {
+    client.release();
+  }
+};
 
 exports.getTickets = async ({
   userId,
@@ -126,4 +162,208 @@ exports.getTicketById = async ({ ticketId, userId, userRole }) => {
   }
 
   return ticket;
+};
+
+exports.updateTicketStatus = async ({ ticketId, status, userRole, userId }) => {
+  if (userRole !== "support" && userRole !== "admin") {
+    throw new AppError("Forbidden", 403);
+  }
+  const isStatusValid = ALLOWED_STATUSES.includes(status);
+  if (!isStatusValid) {
+    throw new AppError("Invalid status", 400);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ticketQuery = await client.query(
+      "SELECT * FROM tickets WHERE id = $1",
+      [ticketId],
+    );
+    if (ticketQuery.rows.length === 0) {
+      await client.query("ROLLBACK");
+      throw new AppError("Ticket not found", 404);
+    }
+    const getTicket = ticketQuery.rows[0];
+    const oldStatus = getTicket.status;
+    const ticketUpdated = await client.query(
+      "UPDATE tickets SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, title, description, priority, status, created_by, assigned_to, updated_at",
+      [status, ticketId],
+    );
+    const newTicket = ticketUpdated.rows[0];
+    const newStatus = newTicket.status;
+    const action = "ticket_updated";
+    const details = `Status changed from ${oldStatus} to ${newStatus}`;
+    await client.query(
+      "INSERT INTO ticket_activity (ticket_id, actor_id, action, details) VALUES ($1, $2, $3, $4)",
+      [ticketId, userId, action, details],
+    );
+    await client.query("COMMIT");
+    return ticketUpdated.rows[0];
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.statusCode) {
+      throw err;
+    }
+    console.error(
+      "An unexpected error occurred in updateTicketStatus Service",
+      err.message,
+    );
+    throw new AppError("An unexpected server error occurred", 500);
+  } finally {
+    client.release();
+  }
+};
+
+exports.assignTicket = async ({ userRole, assigned_to, ticketId, userId }) => {
+  if (userRole !== "support" && userRole !== "admin") {
+    throw new AppError("Forbidden", 403);
+  }
+  if (!assigned_to) {
+    throw new AppError("User ID is required to assign ticket", 400);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const userQuery = await client.query(
+      "SELECT id, role FROM users WHERE id = $1 AND is_active = true",
+      [assigned_to],
+    );
+    const assignedUser = userQuery.rows[0];
+    if (!assignedUser) {
+      await client.query("ROLLBACK");
+      throw new AppError("User not found", 404);
+    }
+    if (assignedUser.role !== "support" && assignedUser.role !== "admin") {
+      throw new AppError("Assigned user must be authorized", 403);
+    }
+    const ticketQuery = await client.query(
+      "SELECT assigned_to, id FROM tickets WHERE id = $1",
+      [ticketId],
+    );
+    if (ticketQuery.rows.length === 0) {
+      throw new AppError("Ticket not found", 404);
+    }
+    const getTicket = ticketQuery.rows[0];
+    const oldAssignedUser = getTicket.assigned_to;
+    const updateTicket = await client.query(
+      "UPDATE tickets SET assigned_to = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, title, status, priority, created_by, assigned_to, updated_at",
+      [assignedUser.id, ticketId],
+    );
+    const updatedTicket = updateTicket.rows[0];
+    const newAssignedUser = updatedTicket.assigned_to;
+    const action = "ticket_assigned";
+    const details = `Ticket assigned from ${oldAssignedUser} to ${newAssignedUser}`;
+    await client.query(
+      "INSERT INTO ticket_activity (ticket_id, actor_id, action, details) VALUES ($1, $2, $3, $4)",
+      [ticketId, userId, action, details],
+    );
+    await client.query("COMMIT");
+    return updatedTicket;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.statusCode) {
+      throw err;
+    }
+    console.error(
+      "An unexpected error occurred in assignTicket Service",
+      err.message,
+    );
+    throw new AppError("An unexpected server error occurred", 500);
+  } finally {
+    client.release();
+  }
+};
+
+exports.createComment = async ({ comment, ticketId, userId, userRole }) => {
+  if (!comment) {
+    throw new AppError("Comment is required", 400);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const ticketQuery = await client.query(
+      "SELECT id, created_by FROM tickets WHERE id = $1",
+      [ticketId],
+    );
+    const ticket = ticketQuery.rows[0];
+    if (!ticket) {
+      await client.query("ROLLBACK");
+      throw new AppError("Ticket not found", 404);
+    }
+    const isStaff = userRole === "support" || userRole === "admin";
+    const isTicketOwner =
+      userRole === "customer" && userId === ticket.created_by;
+    if (!isStaff && !isTicketOwner) {
+      await client.query("ROLLBACK");
+      throw new AppError("You are not allowed to comment", 403);
+    }
+    const result = await client.query(
+      "INSERT INTO ticket_comments (ticket_id, author_id, comment) VALUES ($1, $2, $3) RETURNING id, ticket_id, author_id, comment, created_at",
+      [ticketId, userId, comment],
+    );
+    const commentCreated = result.rows[0];
+    const action = "comment_added";
+    const details = "Comment added to ticket";
+    await client.query(
+      "INSERT INTO ticket_activity (ticket_id, actor_id, action, details) VALUES ($1, $2, $3, $4)",
+      [ticketId, userId, action, details],
+    );
+    await client.query("COMMIT");
+    return commentCreated;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.statusCode) {
+      throw err;
+    }
+    console.error(
+      "An unexpected error occurred in createComment Service",
+      err.message,
+    );
+    throw new AppError("An unexpected server error occurred", 500);
+  } finally {
+    client.release();
+  }
+};
+
+exports.getComments = async ({ userRole, ticketId, userId }) => {
+  const ticketQuery = await pool.query(
+    "SELECT id, created_by FROM tickets WHERE id = $1",
+    [ticketId],
+  );
+  if (ticketQuery.rows.length === 0) {
+    throw new AppError("Ticket not found", 404);
+  }
+  const ticket = ticketQuery.rows[0];
+  const isStaff = userRole === "support" || userRole === "admin";
+  const isTicketOwner = userRole === "customer" && userId === ticket.created_by;
+  if (!isStaff && !isTicketOwner) {
+    throw new AppError("User not authorized", 403);
+  }
+  const result = await pool.query(
+    "SELECT id, ticket_id, author_id, comment, created_at FROM ticket_comments WHERE ticket_id = $1 ORDER BY created_at ASC",
+    [ticketId],
+  );
+  return result.rows;
+};
+
+exports.getTicketActivity = async ({ userRole, ticketId, userId }) => {
+  const ticketQuery = await pool.query(
+    "SELECT id, created_by FROM tickets WHERE id = $1",
+    [ticketId],
+  );
+  if (ticketQuery.rows.length === 0) {
+    throw new AppError("Ticket not found", 404);
+  }
+  const ticket = ticketQuery.rows[0];
+  const isStaff = userRole === "admin" || userRole === "support";
+  const isTicketOwner = userRole === "customer" && userId === ticket.created_by;
+
+  if (!isStaff && !isTicketOwner) {
+    throw new AppError("User not authorized", 403);
+  }
+  const activityQuery = await pool.query(
+    "SELECT id, ticket_id, actor_id, action, details, created_at FROM ticket_activity WHERE ticket_id = $1 ORDER BY created_at ASC",
+    [ticketId],
+  );
+  return activityQuery.rows;
 };
