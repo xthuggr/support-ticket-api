@@ -5,6 +5,22 @@ const {
 } = require("../utils/ticketConstants");
 const AppError = require("../utils/AppError");
 
+const getAuthorizedTicket = async ({ ticketId, userId, userRole }) => {
+  const result = await pool.query("SELECT * FROM tickets WHERE id = $1", [
+    ticketId,
+  ]);
+  if (result.rows.length === 0) {
+    throw new AppError("Ticket not found", 404);
+  }
+  const ticket = result.rows[0];
+  const isStaff = userRole === "support" || userRole === "admin";
+  const isTicketOwner = userRole === "customer" && userId === ticket.created_by;
+  if (!isStaff && !isTicketOwner) {
+    throw new AppError("Forbidden", 403);
+  }
+  return ticket;
+};
+
 exports.createTicket = async ({ title, description, priority, userId }) => {
   const ticketPriority = priority || "medium";
   if (!title || !description) {
@@ -144,23 +160,11 @@ exports.getTickets = async ({
 };
 
 exports.getTicketById = async ({ ticketId, userId, userRole }) => {
-  const result = await pool.query("SELECT * FROM tickets WHERE id = $1", [
+  const ticket = await getAuthorizedTicket({
     ticketId,
-  ]);
-
-  if (result.rows.length === 0) {
-    throw new AppError("Ticket not found", 404);
-  }
-
-  const ticket = result.rows[0];
-
-  const isStaff = userRole === "support" || userRole === "admin";
-  const isTicketOwner = userRole === "customer" && userId === ticket.created_by;
-
-  if (!isStaff && !isTicketOwner) {
-    throw new AppError("Forbidden", 403);
-  }
-
+    userId,
+    userRole,
+  });
   return ticket;
 };
 
@@ -281,22 +285,11 @@ exports.createComment = async ({ comment, ticketId, userId, userRole }) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const ticketQuery = await client.query(
-      "SELECT id, created_by FROM tickets WHERE id = $1",
-      [ticketId],
-    );
-    const ticket = ticketQuery.rows[0];
-    if (!ticket) {
-      await client.query("ROLLBACK");
-      throw new AppError("Ticket not found", 404);
-    }
-    const isStaff = userRole === "support" || userRole === "admin";
-    const isTicketOwner =
-      userRole === "customer" && userId === ticket.created_by;
-    if (!isStaff && !isTicketOwner) {
-      await client.query("ROLLBACK");
-      throw new AppError("You are not allowed to comment", 403);
-    }
+    await getAuthorizedTicket({
+      ticketId,
+      userId,
+      userRole,
+    });
     const result = await client.query(
       "INSERT INTO ticket_comments (ticket_id, author_id, comment) VALUES ($1, $2, $3) RETURNING id, ticket_id, author_id, comment, created_at",
       [ticketId, userId, comment],
@@ -326,19 +319,11 @@ exports.createComment = async ({ comment, ticketId, userId, userRole }) => {
 };
 
 exports.getComments = async ({ userRole, ticketId, userId }) => {
-  const ticketQuery = await pool.query(
-    "SELECT id, created_by FROM tickets WHERE id = $1",
-    [ticketId],
-  );
-  if (ticketQuery.rows.length === 0) {
-    throw new AppError("Ticket not found", 404);
-  }
-  const ticket = ticketQuery.rows[0];
-  const isStaff = userRole === "support" || userRole === "admin";
-  const isTicketOwner = userRole === "customer" && userId === ticket.created_by;
-  if (!isStaff && !isTicketOwner) {
-    throw new AppError("User not authorized", 403);
-  }
+  await getAuthorizedTicket({
+    ticketId,
+    userId,
+    userRole,
+  });
   const result = await pool.query(
     "SELECT id, ticket_id, author_id, comment, created_at FROM ticket_comments WHERE ticket_id = $1 ORDER BY created_at ASC",
     [ticketId],
@@ -347,20 +332,11 @@ exports.getComments = async ({ userRole, ticketId, userId }) => {
 };
 
 exports.getTicketActivity = async ({ userRole, ticketId, userId }) => {
-  const ticketQuery = await pool.query(
-    "SELECT id, created_by FROM tickets WHERE id = $1",
-    [ticketId],
-  );
-  if (ticketQuery.rows.length === 0) {
-    throw new AppError("Ticket not found", 404);
-  }
-  const ticket = ticketQuery.rows[0];
-  const isStaff = userRole === "admin" || userRole === "support";
-  const isTicketOwner = userRole === "customer" && userId === ticket.created_by;
-
-  if (!isStaff && !isTicketOwner) {
-    throw new AppError("User not authorized", 403);
-  }
+  await getAuthorizedTicket({
+    ticketId,
+    userId,
+    userRole,
+  });
   const activityQuery = await pool.query(
     "SELECT id, ticket_id, actor_id, action, details, created_at FROM ticket_activity WHERE ticket_id = $1 ORDER BY created_at ASC",
     [ticketId],
