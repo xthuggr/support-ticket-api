@@ -345,7 +345,8 @@ Example response:
 
 Stores user accounts, authentication information, and roles.
 
-´´´users
+´´´
+users
 ├── id
 ├── username
 ├── email
@@ -358,7 +359,8 @@ Stores user accounts, authentication information, and roles.
 
 Stores support requests and ticket ownership information.
 
-```tickets
+```
+tickets
 ├── id
 ├── title
 ├── description
@@ -372,7 +374,8 @@ Stores support requests and ticket ownership information.
 
 Stores discussions associated with tickets.
 
-```ticket_comments
+```
+ticket_comments
 ├── id
 ├── ticket_id ────────→ tickets.id
 ├── author_id ────────→ users.id
@@ -383,7 +386,8 @@ Stores discussions associated with tickets.
 
 Stores an audit trail of ticket actions such as status changes, assignments, and comments.
 
-```ticket_activity
+```
+ticket_activity
 ├── id
 ├── ticket_id ────────→ tickets.id
 ├── actor_id ─────────→ users.id
@@ -417,6 +421,7 @@ npm run dev
 
 ## Environment Variables
 
+```
 PORT=
 DB_HOST=
 DB_PORT=
@@ -424,6 +429,7 @@ DB_NAME=
 DB_USER=
 DB_PASSWORD=
 JWT_SECRET=
+```
 
 ## Future Improvements
 
