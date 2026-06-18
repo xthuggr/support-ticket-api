@@ -4,6 +4,10 @@ This project simulates a support ticket management system commonly used in SaaS 
 
 The goal was to practice backend development concepts while building a realistic business application that includes authentication, authorization, ticket workflows, comments, activity tracking, search, filtering, and pagination.
 
+## Projet Status
+
+Current version includes authentication, authorization, ticket workflows, comments, activity auditing, search, filtering, pagination, transactions, service-layer architecture, and API documentation.
+
 ## Key Concepts Implemented
 
 - JWT Authentication
@@ -127,162 +131,202 @@ Example response:
 
 ### Tickets
 
-Create ticket
+#### Create ticket
 
+```http
 POST /tickets
+```
 
 Request body:
 
+```json
 {
-"title": "Login issue",
-"description": "User cannot access the dashboard.",
-"priority": "high"
+  "title": "Login issue",
+  "description": "User cannot access the dashboard.",
+  "priority": "high"
 }
+```
 
 Example response:
 
+```json
 {
-"status": "success",
-"ticket": {
-"id": "ticket_uuid",
-"title": "Login issue",
-"description": "User cannot access the dashboard.",
-"status": "open",
-"priority": "high",
-"created_by": "user_uuid",
-"assigned_to": null,
-"created_at": "2026-06-01T12:00:00.000Z"
+  "status": "success",
+  "ticket": {
+    "id": "ticket_uuid",
+    "title": "Login issue",
+    "description": "User cannot access the dashboard.",
+    "status": "open",
+    "priority": "high",
+    "created_by": "user_uuid",
+    "assigned_to": null,
+    "created_at": "2026-06-01T12:00:00.000Z"
+  }
 }
-}
+```
 
-Get tickets
+#### Get tickets
 
+```http
 GET /tickets
+```
 
 Supports filtering, search, and pagination:
 
+```http
 GET /tickets?status=open&priority=high&search=login&page=1&limit=10
+```
 
 Example response:
 
+```json
 {
-"status": "success",
-"page": 1,
-"limit": 10,
-"count": 1,
-"total": 1,
-"totalPages": 1,
-"tickets": []
+  "status": "success",
+  "page": 1,
+  "limit": 10,
+  "count": 1,
+  "total": 1,
+  "totalPages": 1,
+  "tickets": []
 }
+```
 
-Get ticket by ID
+#### Get ticket by ID
 
+```http
 GET /tickets/:id
+```
 
 Example response:
 
+```json
 {
-"status": "success",
-"ticket": {
-"id": "ticket_uuid",
-"title": "Login issue",
-"description": "User cannot access the dashboard.",
-"status": "open",
-"priority": "high"
+  "status": "success",
+  "ticket": {
+    "id": "ticket_uuid",
+    "title": "Login issue",
+    "description": "User cannot access the dashboard.",
+    "status": "open",
+    "priority": "high"
+  }
 }
-}
+```
 
-Update ticket status
+#### Update ticket status
 
+```http
 PATCH /tickets/:id/status
+```
 
 Request body:
 
+```json
 {
-"status": "in_progress"
+  "status": "in_progress"
 }
+```
 
 Example response:
 
+```json
 {
-"status": "success",
-"message": "Ticket updated",
-"ticket": {
-"id": "ticket_uuid",
-"status": "in_progress"
+  "status": "success",
+  "message": "Ticket updated",
+  "ticket": {
+    "id": "ticket_uuid",
+    "status": "in_progress"
+  }
 }
-}
+```
 
-Assign ticket
+#### Assign ticket
 
+```http
 PATCH /tickets/:id/assign
+```
 
 Request body:
 
+```json
 {
-"assigned_to": "support_user_uuid"
+  "assigned_to": "support_user_uuid"
 }
+```
 
 Example response:
 
+```json
 {
-"status": "success",
-"message": "Ticket assigned successfully",
-"ticket": {
-"id": "ticket_uuid",
-"assigned_to": "support_user_uuid"
+  "status": "success",
+  "message": "Ticket assigned successfully",
+  "ticket": {
+    "id": "ticket_uuid",
+    "assigned_to": "support_user_uuid"
+  }
 }
-}
+```
 
 ### Comments
 
-Create comment
+#### Create comment
 
+```http
 POST /tickets/:id/comments
+```
 
 Request body:
 
+```json
 {
-"comment": "I am reviewing this issue."
+  "comment": "I am reviewing this issue."
 }
+```
 
 Example response:
 
+```json
 {
-"status": "success",
-"message": "Comment created successfully",
-"comment": {
-"id": "comment_uuid",
-"ticket_id": "ticket_uuid",
-"author_id": "user_uuid",
-"comment": "I am reviewing this issue.",
-"created_at": "2026-06-01T12:00:00.000Z"
+  "status": "success",
+  "message": "Comment created successfully",
+  "comment": {
+    "id": "comment_uuid",
+    "ticket_id": "ticket_uuid",
+    "author_id": "user_uuid",
+    "comment": "I am reviewing this issue.",
+    "created_at": "2026-06-01T12:00:00.000Z"
+  }
 }
-}
+```
 
-Get comments
+#### Get comments
 
+```http
 GET /tickets/:id/comments
+```
 
 Example response:
 
+```json
 {
-"status": "success",
-"comments": []
+  "status": "success",
+  "comments": []
 }
+```
 
 ### Activity
 
-Get ticket activity
+#### Get ticket activity
 
+```http
 GET /tickets/:id/activity
+```
 
 Example response:
 
+```json
 {
-
-"status": "success",
-"activity": [
+  "status": "success",
+  "activity": [
     {
       "id": "activity_uuid",
       "ticket_id": "ticket_uuid",
@@ -291,8 +335,9 @@ Example response:
       "details": "Ticket was created",
       "created_at": "2026-06-01T12:00:00.000Z"
     }
-]   
+  ]
 }
+```
 
 ## Database Diagram
 
@@ -300,57 +345,65 @@ Example response:
 
 Stores user accounts, authentication information, and roles.
 
-users
-  ├── id
-  ├── username
-  ├── email
-  ├── password_hash
-  ├── role
-  └── is_active
+´´´users
+├── id
+├── username
+├── email
+├── password_hash
+├── role
+└── is_active
+´´´
 
 ### tickets
 
 Stores support requests and ticket ownership information.
 
-tickets
-  ├── id
-  ├── title
-  ├── description
-  ├── status
-  ├── priority
-  ├── created_by ───────→ users.id
-  └── assigned_to ──────→ users.id
+```tickets
+├── id
+├── title
+├── description
+├── status
+├── priority
+├── created_by ───────→ users.id
+└── assigned_to ──────→ users.id
+```
 
 ### ticket_comments
 
 Stores discussions associated with tickets.
 
-ticket_comments
-  ├── id
-  ├── ticket_id ────────→ tickets.id
-  ├── author_id ────────→ users.id
-  └── comment
+```ticket_comments
+├── id
+├── ticket_id ────────→ tickets.id
+├── author_id ────────→ users.id
+└── comment
+```
 
 ### ticket_activity
 
 Stores an audit trail of ticket actions such as status changes, assignments, and comments.
 
-ticket_activity
-  ├── id
-  ├── ticket_id ────────→ tickets.id
-  ├── actor_id ─────────→ users.id
-  ├── action
-  └── details
+```ticket_activity
+├── id
+├── ticket_id ────────→ tickets.id
+├── actor_id ─────────→ users.id
+├── action
+└── details
+```
 
 ## Installation
 
 1. Clone repository
 
+```bash
 git clone https://github.com/xthuggr/support-ticket-api.git
+```
 
 2. Install dependencies
 
+```bash
 npm install
+```
 
 3. Configure environment variables
 
@@ -358,7 +411,9 @@ npm install
 
 5. Start server
 
+```bash
 npm run dev
+```
 
 ## Environment Variables
 
